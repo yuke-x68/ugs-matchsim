@@ -1,0 +1,13 @@
+{
+  "Name": "Default1v1",
+  "MatchDefinition": {
+    "Teams": [
+      { "Name": "Main", "TeamCount": { "Min": 2, "Max": 2 }, "PlayerCount": { "Min": 1, "Max": 1 }, "TeamRules": [] }
+    ],
+    "MatchRules": [
+      { "Name": "GameVersionEquality", "Type": "Equality", "Source": "Players.CustomData.GameVersion",
+        "Not": false, "EnableRule": true }
+    ]
+  },
+  "BackfillEnabled": false
+}

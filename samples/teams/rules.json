@@ -1,0 +1,22 @@
+{
+  "Name": "TwoSidesOfTwo",
+  "MatchDefinition": {
+    "Teams": [
+      {
+        "Name": "Side",
+        "TeamCount": { "Min": 2, "Max": 2 },
+        "PlayerCount": {
+          "Min": 2, "Max": 2,
+          "Relaxations": [
+            { "Type": "RangeControl.ReplaceMin", "Value": 1, "AtSeconds": 6, "AgeType": "Oldest" }
+          ]
+        },
+        "TeamRules": []
+      }
+    ],
+    "MatchRules": [
+      { "Name": "SameRegion", "Type": "Equality", "Source": "Players.CustomData.Region" }
+    ]
+  },
+  "BackfillEnabled": false
+}

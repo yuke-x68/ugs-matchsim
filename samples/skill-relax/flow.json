@@ -1,0 +1,17 @@
+{
+  // P1 (1000) and P2 (1300) are too far apart until the window widens to 400 at age 10 s.
+  "queue": { "timeoutSeconds": 30 },
+  "tickets": [
+    { "id": "P1", "at": 0, "customData": { "Skill": 1000 } },
+    { "id": "P2", "at": 1, "customData": { "Skill": 1300 } },
+    { "id": "P3", "at": 2, "customData": { "Skill": 1900 } },
+    { "id": "P4", "at": 3, "customData": { "Skill": 1950 } },
+    { "id": "P5", "at": 4, "customData": { "Skill": 5000 } }
+  ],
+  "expect": [
+    { "name": "close skills match quickly", "together": ["P3", "P4"], "by": 3 },
+    { "name": "relaxation lets P1 and P2 match", "together": ["P1", "P2"], "by": 10 },
+    { "apart": ["P1", "P3"] },
+    { "unmatched": ["P5"] }
+  ]
+}

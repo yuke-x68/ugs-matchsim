@@ -1,0 +1,12 @@
+{
+  "name": "ugs-matchsim",
+  "owner": { "name": "yuke" },
+  "plugins": [
+    {
+      "name": "ugs-matchsim",
+      "source": "./plugin/ugs-matchsim",
+      "description": "Write and run matchmaking tests for a UGS Matchmaker rules JSON with the ugs-matchsim simulator.",
+      "version": "0.2.0"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "Name": "SkillWindow1v1",
+  "MatchDefinition": {
+    "Teams": [
+      { "Name": "Player", "TeamCount": { "Min": 2, "Max": 2 }, "PlayerCount": { "Min": 1, "Max": 1 }, "TeamRules": [] }
+    ],
+    "MatchRules": [
+      {
+        "Name": "SkillSpread", "Type": "Difference", "Source": "Players.CustomData.Skill", "Reference": 100,
+        "Relaxations": [
+          { "Type": "ReferenceControl.Replace", "Value": 400, "AtSeconds": 10, "AgeType": "Oldest" }
+        ]
+      }
+    ]
+  },
+  "BackfillEnabled": false
+}

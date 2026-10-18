@@ -1,0 +1,25 @@
+{
+  // T1 and T4 are parties of two and stay on one team. Matches need 2 teams of 2 players; after 6 s the
+  // per-team minimum drops to 1, which lets T4 + T5 play 2 vs 1.
+  "queue": { "timeoutSeconds": 30, "maxPlayersPerTicket": 2 },
+  "tickets": [
+    { "id": "T1", "at": 0, "players": [
+        { "id": "t1a", "customData": { "Region": "eu" } },
+        { "id": "t1b", "customData": { "Region": "eu" } } ] },
+    { "id": "T2", "at": 1, "customData": { "Region": "eu" } },
+    { "id": "T3", "at": 2, "customData": { "Region": "eu" } },
+    { "id": "T4", "at": 3, "players": [
+        { "id": "t4a", "customData": { "Region": "eu" } },
+        { "id": "t4b", "customData": { "Region": "eu" } } ] },
+    { "id": "T5", "at": 4, "customData": { "Region": "eu" } },
+    { "id": "T6", "at": 5, "customData": { "Region": "us" } }
+  ],
+  "expect": [
+    { "name": "party T1 faces the two solos", "opposingTeams": ["T1", "T2"] },
+    { "sameTeam": ["T2", "T3"] },
+    { "name": "count relaxation lets T4 + T5 start", "together": ["T4", "T5"], "by": 9 },
+    { "opposingTeams": ["T4", "T5"] },
+    { "apart": ["T1", "T4"] },
+    { "unmatched": ["T6"] }
+  ]
+}
