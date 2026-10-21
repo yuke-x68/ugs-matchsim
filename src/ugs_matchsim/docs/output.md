@@ -90,7 +90,8 @@ kind-specific field (`sameMatch: false`, `matchTime` later than `by`, `sharedMat
   "rule": str | null,        rule name for kind "rule"
   "scope": "match" | "team:<name>",
   "with": [ticket id],       other tickets involved in the conflict
-  "values": { "<ticket id>": value },   each involved ticket's own value of the rule's source (plain rules only)
+  "values": { "<ticket id>": value },   each involved ticket's own value of the rule's source (plain rules only;
+                                        for a CloudSave source, the value from the Cloud Save item or the Default)
   "text": str }              one human sentence
 ```
 

@@ -18,7 +18,7 @@ ugs-matchsim --version
 - Missing? Install it: `uv tool install git+https://github.com/yuke-x68/ugs-matchsim`. If the project
   keeps a copy of the repository, use `uv run --project <path-to-copy> ugs-matchsim ...` instead
   (cwd is preserved, so relative paths to rules/flows work).
-- This skill was written for `flow-format: 1` and `json-schema: 1`. If the printed numbers differ,
+- This skill was written for `flow-format: 2` and `json-schema: 1`. If the printed numbers differ,
   trust `ugs-matchsim docs flow` / `ugs-matchsim docs output` over this skill.
 
 Reference topics: `ugs-matchsim docs` lists them: `flow` (flow file), `output` (JSON/exit codes),
@@ -77,7 +77,10 @@ An HTML report is also written next to the flow file; it is for humans, you do n
   (see `warnings` in the JSON and on stderr).
 - The simulator is an interpretation of the public docs, not real UGS. Where the docs are silent it makes
   documented choices: see `ugs-matchsim docs interpretations`. Treat results as a design aid.
-- Unsupported elements (QoS, ExternalData, backfill, pools/filters, ticket `attributes`, other rule
+- Rules reading `Players.CustomData.ExternalData.CloudSave.<key>...` take each player's values from
+  `externalData.cloudSave` (ticket shorthand or per player), not from `customData`; a player without the
+  key gets the rule's `Default`. See the `externalData` section of `ugs-matchsim docs flow`.
+- Unsupported elements (QoS, Leaderboard ExternalData, backfill, pools/filters, ticket `attributes`, other rule
   types) make the run exit 2. `--allow-unsupported` ignores them, which **can change results**; check
   the `unsupported` list in the JSON before trusting a pass.
 - Keep scenarios small: a few tickets, one behaviour per flow file, so a failure is easy to read.

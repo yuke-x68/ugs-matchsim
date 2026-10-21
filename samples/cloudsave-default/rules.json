@@ -1,0 +1,20 @@
+{
+  "Name": "RatingFromCloudSave1v1",
+  "MatchDefinition": {
+    "Teams": [
+      { "Name": "Player", "TeamCount": { "Min": 2, "Max": 2 }, "PlayerCount": { "Min": 1, "Max": 1 }, "TeamRules": [] }
+    ],
+    "MatchRules": [
+      {
+        "Name": "RatingSpread", "Type": "Difference",
+        "Source": "Players.CustomData.ExternalData.CloudSave.progress.rating",
+        "ExternalData": { "CloudSave": { "AccessClass": "Protected", "Default": { "rating": 1000 } } },
+        "Reference": 100,
+        "Relaxations": [
+          { "Type": "ReferenceControl.Replace", "Value": 300, "AtSeconds": 10, "AgeType": "Oldest" }
+        ]
+      }
+    ]
+  },
+  "BackfillEnabled": false
+}

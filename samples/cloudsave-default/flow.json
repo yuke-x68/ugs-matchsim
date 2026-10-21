@@ -1,0 +1,18 @@
+{
+  // Ratings come from Cloud Save (key "progress"), given per player under externalData.cloudSave.
+  // A player without the key uses the rule's Default {"rating": 1000}.
+  "queue": { "timeoutSeconds": 30 },
+  "tickets": [
+    { "id": "A", "at": 0, "externalData": { "cloudSave": { "progress": { "rating": 1000 } } } },
+    { "id": "B", "at": 0 },
+    { "id": "C", "at": 1, "players": [
+        { "id": "c1", "externalData": { "cloudSave": { "progress": { "rating": 1500 } } } } ] },
+    { "id": "D", "at": 2, "externalData": { "cloudSave": { "progress": { "rating": 1750 } } } },
+    { "id": "E", "at": 3 }
+  ],
+  "expect": [
+    { "name": "a player without the key matches through the Default", "together": ["A", "B"], "by": 0 },
+    { "name": "the widened window joins C and D", "together": ["C", "D"], "by": 11 },
+    { "name": "the Default rating stays too far from C and D", "unmatched": ["E"] }
+  ]
+}

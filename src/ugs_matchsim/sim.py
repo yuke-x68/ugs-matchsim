@@ -8,7 +8,7 @@ from typing import Any
 from .common import InputError, fmt, num
 from .flow import Flow, Ticket
 from .rules import (EPS, Range, Rule, Rules, active_relaxations, age_of, check_rule,
-                    effective_min, effective_rule, resolve, triggered)
+                    effective_min, effective_rule, player_value, triggered)
 
 PRIO = {"arrival": 0, "relaxation": 1, "match": 2, "timeout": 3}
 MAX_TICKS = 2_000_000
@@ -74,7 +74,7 @@ class Simulator:
             return None
         vals = []
         for p in self.by_id[tid].players:
-            found, v = resolve(p.custom, rule.path)
+            found, v, _ = player_value(rule, p)
             if not found:
                 return None
             if v not in vals:

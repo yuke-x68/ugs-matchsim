@@ -1,4 +1,4 @@
-# Flow file reference (flow-format 1)
+# Flow file reference (flow-format 2)
 
 A **flow** is a test definition: tickets arriving over simulated time, plus expectations about
 the outcome. The file is JSON; `//` and `/* */` comments and trailing commas are allowed.
@@ -36,14 +36,42 @@ All times are **seconds from the start of the run (t = 0)**.
 | `id` | string | **yes** | – | Unique ticket id; expectations refer to it. |
 | `at` | number >= 0 | no | `0` | Arrival time in seconds. (Not `time`.) |
 | `customData` | object | no | `{}` | **Shorthand** for a one-player ticket whose player id is the ticket id. |
-| `players` | array of player | no | – | Explicit players (a party). Use *either* `players` *or* `customData`, never both. |
+| `externalData` | object | no | `{}` | **Shorthand**: the external data of that one player (below). |
+| `players` | array of player | no | – | Explicit players (a party). Use *either* `players` *or* the `customData`/`externalData` shorthand, never both. |
 | `attributes` | object | no | – | Pool-filter attributes: not simulated; reported as unsupported (exit 2 unless `--allow-unsupported`). |
 
-Player: `{ "id": <string, required>, "customData": <object, default {}> }`.
+Player: `{ "id": <string, required>, "customData": <object, default {}>, "externalData": <object, default {}> }`.
 `customData` values are what the rules read via `Players.CustomData.<path>` (nested objects ok,
 e.g. `{"Skill": {"Rating": 1500}}` is `Players.CustomData.Skill.Rating`).
 A ticket is atomic: its players always end up on the same team of the same match.
 Two tickets that share a player id are never put into the same match.
+
+### `externalData`
+
+Data the real service appends to a ticket itself; in a flow you supply it per player.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `cloudSave` | object | `{}` | The player's Cloud Save items: `{ "<key>": <item>, ... }`, any JSON item. |
+
+A rule with Source `Players.CustomData.ExternalData.CloudSave.<key>.<path>` reads item `<key>` of each
+player's `externalData.cloudSave` and follows `<path>` inside it (keys and path are case-sensitive).
+A player without `<key>` uses the rule's `ExternalData.CloudSave.Default` as the whole item and follows
+`<path>` inside it (interpretation N37). If there is no Default, or the item/Default has nothing at `<path>`,
+the rule is not satisfied for any match with that player while it is enabled, and the ticket's reasons say why.
+There is no `failed` outcome, so such a ticket waits and times out where the real service may fail it earlier.
+`customData` never feeds these rules: a key named `ExternalData` in `customData` only produces a warning.
+`AccessClass` is not used (N38). Leaderboard data is not supported, so `externalData` has no `leaderboard` key.
+
+```jsonc
+// rules: "Source": "Players.CustomData.ExternalData.CloudSave.progress.rating",
+//        "ExternalData": { "CloudSave": { "Default": { "rating": 1000 } } }
+{ "id": "A", "at": 0, "externalData": { "cloudSave": { "progress": { "rating": 1200 } } } },
+{ "id": "B", "at": 0 },                                   // no "progress" key: rating 1000 from the Default
+{ "id": "P", "at": 1, "players": [
+    { "id": "p1", "externalData": { "cloudSave": { "progress": { "rating": 1100 } } } },
+    { "id": "p2" } ] }                                    // p2 uses the Default
+```
 
 ## Expectations
 
@@ -101,13 +129,15 @@ always plays out; if `timeoutSeconds` is larger than the real queue's, results w
 ## Common mistakes
 
 - `time`/`arrival` instead of `at` -> error `tickets[i].time: unknown key ... did you mean 'at'?`.
-- Using `players` **and** `customData` on one ticket -> error; choose one.
+- Using `players` **and** `customData` or `externalData` on one ticket -> error; choose one.
 - `customData` on the ticket for a party: shorthand creates only *one* player. Use `players`.
+- Cloud Save values written into `customData` (as `ExternalData...`): not read; a warning says so.
+  Put them under `externalData.cloudSave`.
 - Treating `by` as "seconds after arrival": it is absolute time from t = 0.
 - Expecting `unmatched` with a huge `timeoutSeconds`: the run still plays it out, but a short real
   timeout would behave differently - set `queue.timeoutSeconds` to the real value.
 - Forgetting that a match needs the rules' `TeamCount.Min`/`PlayerCount.Min` to be reachable: a lone
   ticket never matches under 1v1 rules.
 - Duplicate ticket ids, ids in `expect` that are not in `tickets`, or an expectation with two kind keys.
-- Ticket `attributes` (pool filters), QoS/ExternalData sources, backfill: unsupported, see `ugs-matchsim docs rules`.
+- Ticket `attributes` (pool filters), QoS and Leaderboard sources, backfill: unsupported, see `ugs-matchsim docs rules`.
 - Times are plain numbers of seconds, not strings like `"5s"`.

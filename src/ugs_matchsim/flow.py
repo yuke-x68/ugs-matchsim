@@ -20,6 +20,7 @@ MIN_IDS = {"together": 2, "apart": 2, "matched": 1, "unmatched": 1, "sameTeam": 
 class Player:
     id: str
     custom: dict[str, Any]
+    cloud_save: dict[str, Any] = field(default_factory=dict)  # Cloud Save key -> item (externalData.cloudSave)
 
 
 @dataclass
@@ -64,8 +65,9 @@ class Flow:
 
 TOP_KEYS = ["queue", "tickSeconds", "tickets", "expect"]
 QUEUE_KEYS = ["timeoutSeconds", "maxPlayersPerTicket"]
-TICKET_KEYS = ["id", "at", "players", "customData", "attributes"]
-PLAYER_KEYS = ["id", "customData"]
+TICKET_KEYS = ["id", "at", "players", "customData", "externalData", "attributes"]
+PLAYER_KEYS = ["id", "customData", "externalData"]
+EXTERNAL_KEYS = ["cloudSave"]
 EXPECT_KEYS = [*KINDS.values(), "by", "name"]
 ALIASES = {
     "top": {"ticket": "tickets", "expectations": "expect", "expects": "expect", "expected": "expect",
@@ -74,8 +76,11 @@ ALIASES = {
     "queue": {"timeout": "timeoutSeconds", "maxplayers": "maxPlayersPerTicket"},
     "ticket": {"time": "at", "arrival": "at", "arrive": "at", "arrives": "at", "t": "at", "start": "at",
                "timestamp": "at", "name": "id", "ticketid": "id", "player": "players", "custom": "customData",
-               "data": "customData", "customdatas": "customData"},
-    "player": {"playerid": "id", "name": "id", "custom": "customData", "data": "customData"},
+               "data": "customData", "customdatas": "customData", "external": "externalData",
+               "cloudsave": "externalData.cloudSave"},
+    "player": {"playerid": "id", "name": "id", "custom": "customData", "data": "customData",
+               "external": "externalData", "cloudsave": "externalData.cloudSave"},
+    "external": {"cloud": "cloudSave", "cloud_save": "cloudSave", "cloudsaves": "cloudSave"},
     "expect": {"togther": "together", "same_team": "sameTeam", "sameteams": "sameTeam", "opposing": "opposingTeams",
                "opposingteam": "opposingTeams", "match": "matched", "notmatched": "unmatched",
                "deadline": "by", "description": "name"},
@@ -112,6 +117,27 @@ class _Errors:
 
 def _is_id(v: Any) -> bool:
     return isinstance(v, (str, int)) and not isinstance(v, bool) and str(v) != ""
+
+
+def _player_data(er: _Errors, d: dict[str, Any], ctx: str, diag: Diagnostics) -> tuple[dict[str, Any], dict[str, Any]]:
+    """customData and externalData.cloudSave of one player (a players[] entry or the ticket shorthand)."""
+    cd = d.get("customdata", {})
+    if not isinstance(cd, dict):
+        er.add(f"{ctx}.customData", _kind(cd), "an object, e.g. {\"GameVersion\": \"1.2.0\"}")
+        cd = {}
+    for k in cd:
+        if k.lower() == "externaldata":
+            diag.warn(f"{ctx}.customData.{k}: not read by any rule; a Players.CustomData.ExternalData.CloudSave.* "
+                      f"source reads {ctx}.externalData.cloudSave instead")
+    cloud: Any = {}
+    if "externaldata" in d:
+        ext = er.obj(d["externaldata"], f"{ctx}.externalData", EXTERNAL_KEYS, ALIASES["external"]) or {}
+        cloud = ext.get("cloudsave", {})
+    if not isinstance(cloud, dict):
+        er.add(f"{ctx}.externalData.cloudSave", _kind(cloud),
+               "an object of Cloud Save key -> item, e.g. {\"progress\": {\"rating\": 1200}}")
+        cloud = {}
+    return cd, cloud
 
 
 def parse_flow(data: Any, diag: Diagnostics, file: str = "flow",
@@ -167,16 +193,18 @@ def parse_flow(data: Any, diag: Diagnostics, file: str = "flow",
         if not is_num(at) or at < 0:
             er.add(f"{ctx}.at", f"got {at!r}", "a number >= 0 (seconds from the start of the run)")
             at = 0
-        if "players" in d and "customdata" in d:
-            er.add(ctx, "both players and customData given",
-                   "either players (list) or the customData shorthand, not both")
+        shorthand = [k for k in ("customData", "externalData") if k.lower() in d]
+        if "players" in d and shorthand:
+            er.add(ctx, f"both players and {' and '.join(shorthand)} given",
+                   "either players (list; each player has its own customData/externalData) "
+                   "or the one-player customData/externalData shorthand, not both")
             continue
         players: list[Player] = []
         if "players" in d:
             pl = d["players"]
             if not isinstance(pl, list) or not pl:
                 er.add(f"{ctx}.players", _kind(pl) if not isinstance(pl, list) else "empty array",
-                       "a non-empty array of {id, customData} objects")
+                       "a non-empty array of {id, customData, externalData} objects")
             else:
                 for j, p in enumerate(pl):
                     pctx = f"{ctx}.players[{j}]"
@@ -187,17 +215,9 @@ def parse_flow(data: Any, diag: Diagnostics, file: str = "flow",
                         er.add(f"{pctx}.id", "missing" if "id" not in pd else f"got {pd['id']!r}",
                                "a non-empty string (player id)")
                         continue
-                    cd = pd.get("customdata", {})
-                    if not isinstance(cd, dict):
-                        er.add(f"{pctx}.customData", _kind(cd), "an object, e.g. {\"GameVersion\": \"1.2.0\"}")
-                        cd = {}
-                    players.append(Player(str(pd["id"]), cd))
+                    players.append(Player(str(pd["id"]), *_player_data(er, pd, pctx, diag)))
         elif tid is not None:
-            cd = d.get("customdata", {})
-            if not isinstance(cd, dict):
-                er.add(f"{ctx}.customData", _kind(cd), "an object, e.g. {\"GameVersion\": \"1.2.0\"}")
-                cd = {}
-            players.append(Player(tid, cd))
+            players.append(Player(tid, *_player_data(er, d, ctx, diag)))
         if len(players) > maxp:
             er.add(f"{ctx}.players", f"ticket '{tid}' has {len(players)} players",
                    f"at most {source('maxPlayersPerTicket')}={maxp} players")

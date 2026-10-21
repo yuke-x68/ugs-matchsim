@@ -47,11 +47,20 @@ class Range:
 
 
 @dataclass
+class CloudSave:
+    """A `Players.CustomData.ExternalData.CloudSave.<key>...` source (S44)."""
+    key: str
+    access_class: str = "Protected"  # N38: checked, not used
+    has_default: bool = False
+    default: Any = None  # N37: stands in for the whole item of `key`
+
+
+@dataclass
 class Rule:
     name: str
     type: str
     source: str
-    path: list[str]
+    path: list[str]  # inside the player's custom data, or inside the Cloud Save item when cloud_save is set
     op: str | None
     reference: Any
     overlap: Any
@@ -61,6 +70,7 @@ class Rule:
     ignored: bool = False
     scope: str = "match"
     team_name: str | None = None
+    cloud_save: CloudSave | None = None
 
     @property
     def display(self) -> str:
@@ -161,6 +171,26 @@ def _parse_relaxations(raw: Any, ctx: str, diag: Diagnostics, kind: str, rtype: 
     return out
 
 
+def _parse_external(raw: Any, ctx: str, cloud: CloudSave | None, diag: Diagnostics) -> str | None:
+    """Rule-level ExternalData (S43, S44). Fills `cloud`; returns why the rule is unsupported, if it is."""
+    e = ci_keys(raw, {"cloudsave", "leaderboard"}, ctx, diag)
+    if "cloudsave" in e:
+        c = ci_keys(e["cloudsave"], {"accessclass", "default"}, f"{ctx}.CloudSave", diag)
+        access = c.get("accessclass", "Protected")
+        if not isinstance(access, str):
+            raise InputError(f"{ctx}.CloudSave.AccessClass: got {fmt(access)}; expected a string, e.g. \"Protected\"")
+        if cloud is None:
+            diag.warn(f"{ctx}.CloudSave: ignored; only a Players.CustomData.ExternalData.CloudSave.<key> "
+                      "source reads it")
+        else:
+            cloud.access_class = access
+            cloud.has_default = "default" in c
+            cloud.default = c.get("default")
+    if "leaderboard" in e:
+        return "ExternalData.Leaderboard is not implemented"
+    return None
+
+
 def _parse_rule(raw: Any, ctx: str, diag: Diagnostics, scope: str, team_name: str | None, idx: int) -> Rule:
     d = ci_keys(raw, {"name", "type", "source", "reference", "overlap", "not", "enablerule",
                       "relaxations", "externaldata"}, ctx, diag)
@@ -181,13 +211,23 @@ def _parse_rule(raw: Any, ctx: str, diag: Diagnostics, scope: str, team_name: st
     segs = d["source"].split(".")
     path: list[str] = []
     op: str | None = None
+    cloud: CloudSave | None = None
     if len(segs) >= 3 and segs[0].lower() == "players" and segs[1].lower() == "customdata":
         path = segs[2:]
-        if path[0].lower() == "externaldata":
-            ignored_reason = ignored_reason or "ExternalData sources (Leaderboard/CloudSave) are not implemented"
+        is_cloud = len(path) >= 2 and path[0].lower() == "externaldata" and path[1].lower() == "cloudsave"
+        if is_cloud:
+            path = path[2:]  # <key>[.<path inside the item>]
+            if not path or not path[0]:
+                raise InputError(f"{ctx}.Source: '{d['source']}' names no Cloud Save key; "
+                                 "expected Players.CustomData.ExternalData.CloudSave.<key>[.<path>]")
+        elif path[0].lower() == "externaldata":
+            ignored_reason = ignored_reason or "ExternalData sources other than CloudSave (e.g. Leaderboard) are not implemented"
         if len(path) >= 2 and path[-1].lower() in OPS:
             op = OPS[path[-1].lower()]
             path = path[:-1]
+        if is_cloud:
+            cloud = CloudSave(path[0])
+            path = path[1:]
     else:
         low = d["source"].lower()
         if "qos" in low:
@@ -195,7 +235,12 @@ def _parse_rule(raw: Any, ctx: str, diag: Diagnostics, scope: str, team_name: st
         else:
             ignored_reason = ignored_reason or f"source '{d['source']}' is not implemented (only Players.CustomData.* is)"
     if "externaldata" in d:
-        ignored_reason = ignored_reason or "rule-level ExternalData is not implemented"
+        ext_reason = _parse_external(d["externaldata"], f"{ctx}.ExternalData", cloud, diag)
+        ignored_reason = ignored_reason or ext_reason
+    if cloud is not None and cloud.has_default and not ignored_reason and not resolve(cloud.default, path)[0]:
+        diag.warn(f"{ctx}.ExternalData.CloudSave.Default: has no value at '{'.'.join(path)}' (the Source path "
+                  f"after the Cloud Save key '{cloud.key}'); a player without that key leaves rule '{name}' "
+                  "unsatisfied (N37)")
     ref = d.get("reference")
     overlap = d.get("overlap")
     if rtype is not None:
@@ -211,7 +256,7 @@ def _parse_rule(raw: Any, ctx: str, diag: Diagnostics, scope: str, team_name: st
                     "so matches may form that the real service would reject")
     return Rule(name, rtype or rtype_raw, d["source"], path, op, ref, overlap,
                 bool(d.get("not", False)), bool(d.get("enablerule", True)), relax,
-                ignored=ignored_reason is not None, scope=scope, team_name=team_name)
+                ignored=ignored_reason is not None, scope=scope, team_name=team_name, cloud_save=cloud)
 
 
 def _parse_range(raw: Any, ctx: str, diag: Diagnostics) -> Range:
@@ -399,12 +444,30 @@ def resolve(data: Any, path: list[str]) -> tuple[bool, Any]:
     return True, cur
 
 
+def player_value(rule: Rule, p: Any) -> tuple[bool, Any, str | None]:
+    """The value the rule's source reads for one player: (found, value, why it is missing)."""
+    cs = rule.cloud_save
+    if cs is None:
+        found, v = resolve(p.custom, rule.path)
+        return found, v, None if found else f"player {p.id} has no value at Players.CustomData.{'.'.join(rule.path)}"
+    if cs.key in p.cloud_save:
+        found, v = resolve(p.cloud_save[cs.key], rule.path)
+        where = f"player {p.id}'s Cloud Save key '{cs.key}'"
+    elif cs.has_default:  # N37: Default stands in for the whole item
+        found, v = resolve(cs.default, rule.path)
+        where = f"ExternalData.CloudSave.Default (player {p.id} has no Cloud Save key '{cs.key}')"
+    else:
+        return False, None, (f"player {p.id} has no Cloud Save key '{cs.key}' and the rule has no "
+                             "ExternalData.CloudSave.Default")
+    return found, v, None if found else f"{where} has no value at '{'.'.join(rule.path)}'"
+
+
 def source_values(rule: Rule, players: list[Any]) -> tuple[list[Any] | None, str | None]:
     vals = []
     for p in players:
-        found, v = resolve(p.custom, rule.path)
+        found, v, missing = player_value(rule, p)
         if not found:
-            return None, f"player {p.id} has no value at Players.CustomData.{'.'.join(rule.path)}"
+            return None, missing
         vals.append(v)
     if rule.op is None:
         return vals, None

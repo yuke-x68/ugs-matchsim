@@ -65,4 +65,4 @@ def test_version(capsys):
     with pytest.raises(SystemExit):
         main(["--version"])
     out = capsys.readouterr().out
-    assert "flow-format: 1" in out and "json-schema: 1" in out
+    assert "flow-format: 2" in out and "json-schema: 1" in out
