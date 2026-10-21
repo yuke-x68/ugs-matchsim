@@ -120,6 +120,6 @@ def test_json_is_byte_identical(tmp_path):
 
 
 def test_all_samples_pass(tmp_path):
-    for name in ["1v1-version", "skill-relax", "teams"]:
+    for name in ["1v1-version", "skill-relax", "teams", "cloudsave-default"]:
         p = cli("run", "--rules", s(name, "rules.json"), "--flow", s(name, "flow.json"), "--report", str(tmp_path / "x.html"))
         assert p.returncode == 0, (name, p.stdout)

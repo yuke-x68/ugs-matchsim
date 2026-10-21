@@ -37,11 +37,15 @@ INTERP = {
     "N21": "A match needs >= TeamCount.Min non-empty teams, each with >= PlayerCount.Min players.",
     "N23": "A ticket times out when age >= timeoutSeconds; a match formed on the same tick wins; the timeout is stamped at arrival + timeout.",
     "N27": "A ticket with more players than queue.maxPlayersPerTicket is an input error; one larger than every team's PlayerCount.Max can never match.",
+    "N29": "CloudSave sources read each player's externalData.cloudSave in the flow (Cloud Save key -> item), never customData.",
     "N31": "Defaults when the inputs omit them (the flow, else a .mmq rules file): timeoutSeconds 60, maxPlayersPerTicket 150, tickSeconds 1.",
     "N32": "A trailing source segment named Count/Median/Avg/Sum/Min/Max (after at least one field segment) is always read as an operation.",
     "N33": "Count counts values that are neither null nor false.",
     "N34": "Rules with Not or an operation suffix are not monotone; they are checked on the finished candidate only (tickets are then trimmed from the end until valid).",
     "N36": "Two tickets sharing a player id are never put into the same match.",
+    "N37": "ExternalData.CloudSave.Default replaces the whole item of a missing Cloud Save key and the rest of the Source path is read from it; "
+           "a Default without that path leaves the rule unsatisfied (based on a user's measurement, not the public docs).",
+    "N38": "ExternalData.CloudSave.AccessClass must be a string but is not used: the flow's cloudSave is one store for every access class.",
 }
 
 
@@ -78,6 +82,11 @@ def used_interpretations(rules: Rules, flow: Flow) -> list[str]:
         used.add("N33")
     if any(r.not_ for r in live):
         used.add("N34")
+    cloud = [r.cloud_save for r in live if r.cloud_save]
+    if cloud:
+        used |= {"N29", "N38"}
+    if any(c.has_default for c in cloud):
+        used.add("N37")
     return sorted(used, key=lambda s: int(s[1:]))
 
 

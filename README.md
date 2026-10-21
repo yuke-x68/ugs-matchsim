@@ -70,10 +70,11 @@ Each expectation may carry a `"name"`. Unknown expectation kinds or ticket ids a
 
 - Teams: `TeamCount` / `PlayerCount` Min/Max, several team definitions, multi-player tickets kept together.
 - Match rules and team rules of type Equality, Difference, LessThan, LessThanEqual, GreaterThan, GreaterThanEqual, InList, Intersection on `Players.CustomData.*` (nested paths, `Count/Median/Avg/Sum/Min/Max` suffixes), with `Reference`, `Overlap`, `Not`, `EnableRule`.
+- Cloud Save external data (`Players.CustomData.ExternalData.CloudSave.<key>...` with `ExternalData.CloudSave.Default`); the flow supplies each player's values under `externalData.cloudSave`.
 - Relaxations: `RuleControl.Enable/Disable`, `ReferenceControl.Replace`, `RangeControl.ReplaceMin`, with `AtSeconds` and `AgeType` Oldest/Average/Youngest.
 - Queue ticket timeout.
 
-Not implemented (reported as unsupported): QoS and ExternalData sources, backfill (`BackfillEnabled: true`), pools and filters / ticket `attributes`, regions, other rule types.
+Not implemented (reported as unsupported): QoS and Leaderboard ExternalData sources, backfill (`BackfillEnabled: true`), pools and filters / ticket `attributes`, regions, other rule types.
 
 See [`src/ugs_matchsim/docs/spec-inventory.md`](src/ugs_matchsim/docs/spec-inventory.md) for the per-element status table, the interpretations, and the limits.
 
