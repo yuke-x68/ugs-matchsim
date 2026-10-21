@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from .common import Diagnostics, InputError, did_you_mean, is_num, loads_lenient
+from .common import Diagnostics, InputError, did_you_mean, is_num, loads_lenient, num
+from .common import kind as _kind
 
 DEFAULT_TIMEOUT = 60.0  # N31
 DEFAULT_MAX_PLAYERS = 150  # N31
@@ -58,6 +59,7 @@ class Flow:
     tick: float
     tickets: list[Ticket]
     expects: list[Expect] = field(default_factory=list)
+    timeout_from: str = "queue.timeoutSeconds"  # where the timeout value came from (shown in reasons)
 
 
 TOP_KEYS = ["queue", "tickSeconds", "tickets", "expect"]
@@ -108,23 +110,27 @@ class _Errors:
         return out
 
 
-def _kind(v: Any) -> str:
-    return ("null" if v is None else "boolean" if isinstance(v, bool) else "number" if is_num(v)
-            else "string" if isinstance(v, str) else "array" if isinstance(v, list) else "object")
-
-
 def _is_id(v: Any) -> bool:
     return isinstance(v, (str, int)) and not isinstance(v, bool) and str(v) != ""
 
 
-def parse_flow(data: Any, diag: Diagnostics, file: str = "flow") -> Flow:
-    """Strict flow parser. Collects every error and raises one InputError (one line per error)."""
+def parse_flow(data: Any, diag: Diagnostics, file: str = "flow",
+               queue_defaults: dict[str, tuple[Any, str]] | None = None) -> Flow:
+    """Strict flow parser. Collects every error and raises one InputError (one line per error).
+
+    queue_defaults: values from a .mmq rules file (Rules.queue); a key written in the flow wins.
+    """
     er = _Errors(file)
     top = er.obj(data, "(root)", TOP_KEYS, ALIASES["top"]) or {}
     q = er.obj(top["queue"], "queue", QUEUE_KEYS, ALIASES["queue"]) if "queue" in top else {}
     q = q or {}
-    timeout = q.get("timeoutseconds", DEFAULT_TIMEOUT)
-    maxp = q.get("maxplayersperticket", DEFAULT_MAX_PLAYERS)
+    rq = queue_defaults or {}
+
+    def source(key: str) -> str:
+        return f"queue.{key}" if key.lower() in q or key not in rq else rq[key][1]
+
+    timeout = q.get("timeoutseconds", rq.get("timeoutSeconds", (DEFAULT_TIMEOUT,))[0])
+    maxp = q.get("maxplayersperticket", rq.get("maxPlayersPerTicket", (DEFAULT_MAX_PLAYERS,))[0])
     tick = top.get("tickseconds", DEFAULT_TICK)
     if not is_num(timeout) or timeout <= 0:
         er.add("queue.timeoutSeconds", f"got {timeout!r}", "a number > 0 (seconds)")
@@ -194,7 +200,7 @@ def parse_flow(data: Any, diag: Diagnostics, file: str = "flow") -> Flow:
             players.append(Player(tid, cd))
         if len(players) > maxp:
             er.add(f"{ctx}.players", f"ticket '{tid}' has {len(players)} players",
-                   f"at most queue.maxPlayersPerTicket={maxp} players")
+                   f"at most {source('maxPlayersPerTicket')}={maxp} players")
         attrs = d.get("attributes")
         if attrs is not None:
             if not isinstance(attrs, dict):
@@ -252,8 +258,14 @@ def parse_flow(data: Any, diag: Diagnostics, file: str = "flow") -> Flow:
         expects.append(Expect(kind, ids, by, name))
     if er.items:
         raise InputError("\n".join(er.items))
-    return Flow(float(timeout), maxp, float(tick), tickets, expects)
+    for key, val in (("timeoutSeconds", timeout), ("maxPlayersPerTicket", maxp)):
+        if key.lower() in q and key in rq and val != rq[key][0]:
+            rv, where = rq[key]
+            diag.warn(f"queue.{key}: the flow sets {num(val)} but the rules file sets {num(rv)} ({where}); "
+                      f"the flow value {num(val)} is used")
+    return Flow(float(timeout), maxp, float(tick), tickets, expects, source("timeoutSeconds"))
 
 
-def load_flow(text: str, diag: Diagnostics, file: str = "flow file") -> Flow:
-    return parse_flow(loads_lenient(text, file), diag, file)
+def load_flow(text: str, diag: Diagnostics, file: str = "flow file",
+              queue_defaults: dict[str, tuple[Any, str]] | None = None) -> Flow:
+    return parse_flow(loads_lenient(text, file), diag, file, queue_defaults)

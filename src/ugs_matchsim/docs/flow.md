@@ -23,6 +23,10 @@ Run: `ugs-matchsim run --rules <rules.json> --flow <flow.json> --json -`
 | `timeoutSeconds` | number > 0 | `60` | A ticket unmatched after this many seconds since its arrival times out. Set it to the real queue's timeout. |
 | `maxPlayersPerTicket` | integer >= 1 | `150` | A ticket with more players is an input error. |
 
+If the rules file is a UGS CLI queue file (`.mmq`), its `defaultPool.timeoutSeconds` and
+`maxPlayersPerTicket` replace these defaults. A value written in the flow always wins; when it differs
+from the queue file's value, a warning names both values and says the flow value is used.
+
 ## Ticket
 
 All times are **seconds from the start of the run (t = 0)**.

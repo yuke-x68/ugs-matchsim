@@ -6,7 +6,7 @@ import statistics
 from dataclasses import dataclass, field
 from typing import Any
 
-from .common import Diagnostics, InputError, ci_keys, fmt, is_num, loads_lenient
+from .common import Diagnostics, InputError, ci_keys, fmt, is_num, kind, loads_lenient
 
 RULE_TYPES = {
     t.lower(): t
@@ -89,6 +89,8 @@ class Rules:
     teams: list[TeamDef]
     match_rules: list[Rule]
     backfill: bool
+    # .mmq only: flow queue key -> (value, path in the rules file); used when the flow omits the key
+    queue: dict[str, tuple[Any, str]] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------- parsing
@@ -222,15 +224,15 @@ def _parse_range(raw: Any, ctx: str, diag: Diagnostics) -> Range:
     return Range(mn, mx, _parse_relaxations(d.get("relaxations"), ctx, diag, "range", None))
 
 
-def parse_rules(data: Any, diag: Diagnostics) -> Rules:
-    top = ci_keys(data, {"name", "matchdefinition", "backfillenabled"}, "rules", diag)
-    md = ci_keys(top.get("matchdefinition"), {"teams", "matchrules"}, "rules.MatchDefinition", diag)
+def parse_rules(data: Any, diag: Diagnostics, root: str = "rules") -> Rules:
+    top = ci_keys(data, {"name", "matchdefinition", "backfillenabled"}, root, diag)
+    md = ci_keys(top.get("matchdefinition"), {"teams", "matchrules"}, f"{root}.MatchDefinition", diag)
     teams_raw = md.get("teams")
     if not isinstance(teams_raw, list) or not teams_raw:
-        raise InputError("rules.MatchDefinition.Teams: at least one team definition is required")
+        raise InputError(f"{root}.MatchDefinition.Teams: at least one team definition is required")
     teams: list[TeamDef] = []
     for i, t in enumerate(teams_raw):
-        ctx = f"rules.MatchDefinition.Teams[{i}]"
+        ctx = f"{root}.MatchDefinition.Teams[{i}]"
         d = ci_keys(t, {"name", "teamcount", "playercount", "teamrules"}, ctx, diag)
         name = d.get("name") if isinstance(d.get("name"), str) and d.get("name") else f"Team{i + 1}"
         if "teamcount" not in d or "playercount" not in d:
@@ -243,24 +245,85 @@ def parse_rules(data: Any, diag: Diagnostics) -> Rules:
                              _parse_range(d["playercount"], f"{ctx}.PlayerCount", diag), rules))
     mr_raw = md.get("matchrules") or []
     if not isinstance(mr_raw, list):
-        raise InputError("rules.MatchDefinition.MatchRules must be an array")
-    match_rules = [_parse_rule(r, f"rules.MatchDefinition.MatchRules[{j}]", diag, "match", None, j)
+        raise InputError(f"{root}.MatchDefinition.MatchRules must be an array")
+    match_rules = [_parse_rule(r, f"{root}.MatchDefinition.MatchRules[{j}]", diag, "match", None, j)
                    for j, r in enumerate(mr_raw)]
     backfill = top.get("backfillenabled", False)
     if not isinstance(backfill, bool):
-        raise InputError("rules.BackfillEnabled must be true or false")
+        raise InputError(f"{root}.BackfillEnabled must be true or false")
     if backfill:
-        diag.unsupp("rules.BackfillEnabled = true",
+        diag.unsupp(f"{root}.BackfillEnabled = true",
                     "backfill is not simulated; the run behaves as if BackfillEnabled were false "
                     "(no early match with fewer players, no backfill tickets)")
     name = top.get("name") if isinstance(top.get("name"), str) else "(unnamed)"
     return Rules(name, teams, match_rules, backfill)
 
 
+# ------------------------------------------------------------- queue file
+
+def is_queue_file(data: Any, file: str) -> bool:
+    """UGS CLI queue file (S73): named *.mmq, or a top-level `defaultPool` key."""
+    return file.lower().endswith(".mmq") or (
+        isinstance(data, dict) and any(k.lower() == "defaultpool" for k in data))
+
+
+def _optional_array(d: dict[str, Any], key: str, ctx: str) -> list[Any]:
+    v = d.get(key)
+    if v is None:
+        return []
+    if not isinstance(v, list):
+        raise InputError(f"{ctx}: {kind(v)}; expected an array")
+    return v
+
+
+def parse_queue(data: Any, diag: Diagnostics) -> Rules:
+    """Queue file: the default pool's matchLogic is the one simulated pool (S73)."""
+    top = ci_keys(data, {"$schema", "name", "enabled", "maxplayersperticket", "defaultpool", "filteredpools"},
+                  "rules", diag)
+    pool = top.get("defaultpool")
+    if not isinstance(pool, dict):
+        raise InputError(f"rules.DefaultPool: {'missing' if pool is None else kind(pool)}; "
+                         "expected an object with matchLogic (UGS CLI queue file)")
+    pd = ci_keys(pool, {"variants", "name", "enabled", "timeoutseconds", "matchlogic", "matchhosting"},
+                 "rules.DefaultPool", diag)
+    queue: dict[str, tuple[Any, str]] = {}
+    for d, ctx, what in ((top, "rules", "queue"), (pd, "rules.DefaultPool", "pool")):
+        enabled = d.get("enabled", True)
+        if not isinstance(enabled, bool):
+            raise InputError(f"{ctx}.Enabled: got {fmt(enabled)}; expected true or false")
+        if not enabled:
+            diag.unsupp(f"{ctx}.Enabled = false",
+                        f"a disabled {what} is not simulated; the run behaves as if it were enabled")
+    filtered = _optional_array(top, "filteredpools", "rules.FilteredPools")
+    if filtered:
+        diag.unsupp(f"rules.FilteredPools ({len(filtered)} pool(s))",
+                    "filtered pools and their filters are not simulated; every ticket joins the default pool")
+    maxp = top.get("maxplayersperticket")
+    if maxp is not None:
+        if not isinstance(maxp, int) or isinstance(maxp, bool) or maxp < 1:
+            raise InputError(f"rules.MaxPlayersPerTicket: got {fmt(maxp)}; expected an integer >= 1")
+        queue["maxPlayersPerTicket"] = (maxp, "rules.MaxPlayersPerTicket")
+    variants = _optional_array(pd, "variants", "rules.DefaultPool.Variants")
+    if variants:
+        diag.unsupp(f"rules.DefaultPool.Variants ({len(variants)} variant(s))",
+                    "pool variants are not simulated; every ticket uses the default pool's matchLogic")
+    timeout = pd.get("timeoutseconds")
+    if timeout is not None:
+        if not is_num(timeout) or timeout <= 0:
+            raise InputError(f"rules.DefaultPool.TimeoutSeconds: got {fmt(timeout)}; expected a number > 0 (seconds)")
+        queue["timeoutSeconds"] = (timeout, "rules.DefaultPool.TimeoutSeconds")
+    if "matchlogic" not in pd:
+        raise InputError("rules.DefaultPool.MatchLogic: missing; "
+                         "expected the pool rules object (name, matchDefinition, backfillEnabled)")
+    rules = parse_rules(pd["matchlogic"], diag, "rules.DefaultPool.MatchLogic")
+    rules.queue = queue
+    return rules
+
+
 def load_rules(text: str, diag: Diagnostics, file: str = "rules file") -> Rules:
     data = loads_lenient(text, file)
     try:
-        return parse_rules(data, diag)
+        return parse_queue(data, diag) if is_queue_file(data, file) else parse_rules(data, diag)
     except InputError as ex:
         raise InputError(f"{file}: {ex}") from None
 
