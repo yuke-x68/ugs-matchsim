@@ -115,6 +115,12 @@ def is_num(v: Any) -> bool:
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
 
+def kind(v: Any) -> str:
+    """JSON type name of a value, for error messages."""
+    return ("null" if v is None else "boolean" if isinstance(v, bool) else "number" if is_num(v)
+            else "string" if isinstance(v, str) else "array" if isinstance(v, list) else "object")
+
+
 def num(x: float) -> Any:
     """Stable JSON/text number: whole values as int, others rounded."""
     x = round(float(x), 6)

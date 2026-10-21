@@ -26,7 +26,7 @@ def _run(args: argparse.Namespace) -> int:
     diag = Diagnostics()
     try:
         rules = load_rules(_read(args.rules, "rules"), diag, args.rules)
-        flow = load_flow(_read(args.flow, "flow"), diag, args.flow)
+        flow = load_flow(_read(args.flow, "flow"), diag, args.flow, rules.queue)
         for w in diag.warnings:
             print(f"warning: {w}", file=sys.stderr)
         if diag.unsupported:
@@ -101,7 +101,7 @@ def main(argv: list[str] | None = None) -> int:
                        description="Simulate a flow against a rules file. Flow format and result schema: "
                                    "run `ugs-matchsim docs flow` and `ugs-matchsim docs output`. "
                                    "Exit 0 all expectations passed, 1 some failed, 2 input error.")
-    r.add_argument("--rules", required=True, help="pool rules JSON")
+    r.add_argument("--rules", required=True, help="pool rules JSON, or a UGS CLI queue file (.mmq)")
     r.add_argument("--flow", required=True, help="flow JSON (tickets + expectations)")
     r.add_argument("--report", help="HTML report path (default: <flow name>.report.html next to the flow file)")
     r.add_argument("--json", help="also write machine-readable JSON to this path; use - for stdout (summary then goes to stderr)")

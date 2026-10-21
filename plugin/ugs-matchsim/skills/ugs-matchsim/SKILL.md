@@ -70,6 +70,9 @@ An HTML report is also written next to the flow file; it is for humans, you do n
   "after arrival").
 - Set `queue.timeoutSeconds` to the real queue's timeout (default 60). `unmatched` only passes once the
   ticket times out, and relaxations (`AtSeconds`) depend on waiting time.
+- `--rules` also takes a UGS CLI queue file (`.mmq`). Its `defaultPool.timeoutSeconds` and
+  `maxPlayersPerTicket` then fill in for a flow that omits `queue`; do not copy them into the flow
+  (a flow value wins and a differing one only warns).
 - Unknown keys in the flow are errors (typos do not silently pass); in the rules file they are warnings
   (see `warnings` in the JSON and on stderr).
 - The simulator is an interpretation of the public docs, not real UGS. Where the docs are silent it makes

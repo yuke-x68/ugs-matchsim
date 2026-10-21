@@ -37,7 +37,7 @@ INTERP = {
     "N21": "A match needs >= TeamCount.Min non-empty teams, each with >= PlayerCount.Min players.",
     "N23": "A ticket times out when age >= timeoutSeconds; a match formed on the same tick wins; the timeout is stamped at arrival + timeout.",
     "N27": "A ticket with more players than queue.maxPlayersPerTicket is an input error; one larger than every team's PlayerCount.Max can never match.",
-    "N31": "Defaults when the flow omits them: timeoutSeconds 60, maxPlayersPerTicket 150, tickSeconds 1.",
+    "N31": "Defaults when the inputs omit them (the flow, else a .mmq rules file): timeoutSeconds 60, maxPlayersPerTicket 150, tickSeconds 1.",
     "N32": "A trailing source segment named Count/Median/Avg/Sum/Min/Max (after at least one field segment) is always read as an operation.",
     "N33": "Count counts values that are neither null nor false.",
     "N34": "Rules with Not or an operation suffix are not monotone; they are checked on the finished candidate only (tickets are then trimmed from the end until valid).",
@@ -104,7 +104,7 @@ def run(rules: Rules, flow: Flow, diag: Diagnostics, rules_file: str, flow_file:
         if o["status"] != "matched":
             reasons.append({"kind": "timeout", "rule": None, "scope": "match", "with": [], "values": {},
                             "text": f"Timed out at t={o['time']} after waiting {num(flow.timeout)} s "
-                                    "(queue.timeoutSeconds) without forming a match."})
+                                    f"({flow.timeout_from}) without forming a match."})
         item["reasons"] = reasons
         tickets.append(item)
     n_match = sum(1 for t in tickets if t["outcome"] == "matched")

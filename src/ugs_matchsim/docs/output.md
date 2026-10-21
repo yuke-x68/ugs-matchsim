@@ -35,8 +35,8 @@ Key order is stable and the output is deterministic (same inputs -> identical by
 {
   "schemaVersion": 1,                       int
   "tool":   { "name", "version", "flowFormat": int, "unofficial": true },
-  "rules":  { "name": str, "file": str },   file = base name
-  "flow":   { "file": str, "tickSeconds": num, "timeoutSeconds": num },
+  "rules":  { "name": str, "file": str },   name = Name (.mmq: defaultPool.matchLogic.name); file = base name
+  "flow":   { "file": str, "tickSeconds": num, "timeoutSeconds": num },   timeoutSeconds = the value used (flow, else .mmq, else 60)
   "summary": { "tickets", "matches", "ticketsMatched", "ticketsTimedOut",
                "expectationsPassed", "expectationsFailed" },          all int
   "expectations": [ Expectation ],

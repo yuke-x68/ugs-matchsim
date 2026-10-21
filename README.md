@@ -41,6 +41,7 @@ Default report path: `<flow file name without extension>.report.html` next to th
 ## Inputs
 
 **Rules file**: one pool's rules in the documented shape (`Name`, `MatchDefinition.Teams`, `MatchDefinition.MatchRules`, `BackfillEnabled`). Keys are case-insensitive; unknown keys produce a warning.
+A UGS CLI queue file (`.mmq`, e.g. `samples/1v1-version/queue.mmq`) is accepted too: its `defaultPool.matchLogic` is the pool rules, and its `defaultPool.timeoutSeconds` and `maxPlayersPerTicket` are used when the flow's `queue` omits them (a value in the flow wins, with a warning if it differs). Filtered pools, pool variants and `enabled: false` are unsupported.
 
 **Flow file**: JSON, `//` and `/* */` comments and trailing commas allowed, camelCase keys.
 
